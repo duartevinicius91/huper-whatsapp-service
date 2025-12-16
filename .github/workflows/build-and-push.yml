@@ -1,4 +1,4 @@
-name: Deploy Docker to VPS
+name: Build and push image
 
 on:
   push:
