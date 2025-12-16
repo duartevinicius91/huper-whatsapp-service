@@ -259,20 +259,35 @@ LOG_TIMESTAMPS=true
 
 ## Deploy Automatizado com GitHub Actions
 
-Este projeto inclui uma pipeline de CI/CD configurada para fazer deploy automático no VPS sempre que houver push na branch `main`.
+Este projeto inclui duas pipelines de CI/CD separadas:
+
+1. **Build and Push Docker Image**: Gera a imagem Docker e publica no Docker Hub
+2. **Deploy to VPS**: Atualiza o container no VPS com a nova imagem do Docker Hub
 
 ### Configuração dos Secrets no GitHub
 
-Para que a pipeline funcione, você precisa configurar os seguintes secrets no GitHub:
+Para que as pipelines funcionem, você precisa configurar os seguintes secrets no GitHub:
 
 1. Acesse: **Settings** → **Secrets and variables** → **Actions** → **New repository secret**
 
 2. Adicione os seguintes secrets:
 
+   **Para Build e Push:**
+   - **`DOCKERHUB_USERNAME`**: Seu usuário do Docker Hub
+   - **`DOCKERHUB_TOKEN`**: Token de acesso do Docker Hub (não use sua senha, gere um token em Account Settings → Security → New Access Token)
+
+   **Para Deploy no VPS:**
    - **`VPS_HOST`**: Endereço IP ou domínio do seu VPS (ex: `192.168.1.100` ou `meuservidor.com`)
    - **`VPS_USER`**: Usuário SSH do VPS (ex: `root` ou `ubuntu`)
    - **`SSH_PRIVATE_KEY`**: Chave privada SSH para autenticação no VPS
    - **`VPS_DEPLOY_PATH`** (opcional): Caminho no VPS onde o projeto será deployado (padrão: `/opt/whatsapp-service`)
+
+### Como gerar o token do Docker Hub
+
+1. Acesse [Docker Hub](https://hub.docker.com/)
+2. Vá em **Account Settings** → **Security** → **New Access Token**
+3. Dê um nome ao token (ex: `github-actions`)
+4. Copie o token gerado e adicione como secret `DOCKERHUB_TOKEN` no GitHub
 
 ### Como gerar a chave SSH
 
@@ -314,20 +329,49 @@ Certifique-se de que o VPS tem:
    sudo usermod -aG docker $USER
    ```
 
-### Como funciona a pipeline
+5. **Acesso ao Docker Hub** (se a imagem for privada, configure login no VPS):
+   ```bash
+   docker login -u SEU_USUARIO -p SEU_TOKEN
+   ```
 
-1. **Trigger**: A pipeline é executada automaticamente quando há push na branch `main` ou manualmente via GitHub Actions
-2. **Build**: O código é copiado para o VPS via SSH/rsync
-3. **Deploy**: No VPS, a pipeline:
-   - Para e remove o container antigo
-   - Faz build da nova imagem Docker
-   - Inicia um novo container com a nova imagem
-   - Limpa imagens não utilizadas
+### Como funcionam as pipelines
 
-### Executar deploy manualmente
+#### 1. Build and Push Docker Image
 
-Você pode executar a pipeline manualmente acessando:
-**Actions** → **Deploy to VPS** → **Run workflow**
+- **Trigger**: Executa automaticamente quando há push na branch `main`, criação de tags de versão (`v*`), ou manualmente
+- **Ações**:
+  - Faz checkout do código
+  - Faz login no Docker Hub
+  - Gera tags automáticas (latest, branch name, commit SHA, versão semver)
+  - Faz build da imagem Docker
+  - Publica a imagem no Docker Hub
+  - Usa cache para builds mais rápidos
+
+#### 2. Deploy to VPS
+
+- **Trigger**: Executa automaticamente após o workflow "Build and Push Docker Image" ser concluído com sucesso, ou manualmente
+- **Ações**:
+  - Conecta ao VPS via SSH
+  - Faz pull da nova imagem do Docker Hub
+  - Para e remove o container antigo
+  - Atualiza o `docker-compose.yml` para usar a imagem do Docker Hub
+  - Inicia um novo container com a nova imagem
+  - Limpa imagens não utilizadas
+  - Verifica o status do deploy
+
+### Executar workflows manualmente
+
+Você pode executar os workflows manualmente acessando:
+- **Actions** → **Build and Push Docker Image** → **Run workflow**
+- **Actions** → **Deploy to VPS** → **Run workflow** (pode especificar a tag da imagem)
+
+### Tags das imagens Docker
+
+As imagens são publicadas com as seguintes tags:
+- `latest`: Sempre a última versão da branch principal
+- `main-<sha>`: Tag com o SHA do commit (ex: `main-abc123`)
+- `v1.0.0`: Tags de versão semântica (quando você cria uma tag `v1.0.0`)
+- `1.0`: Versão major.minor (quando você cria uma tag `v1.0.0`)
 
 ## Licença
 

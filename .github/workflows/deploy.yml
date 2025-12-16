@@ -1,19 +1,26 @@
 name: Deploy to VPS
 
 on:
-  push:
-    branches:
-      - main  # Ajuste para a branch principal do seu projeto
+  workflow_run:
+    workflows: ["Build and Push Docker Image"]
+    types:
+      - completed
   workflow_dispatch:  # Permite execução manual
+    inputs:
+      image_tag:
+        description: 'Tag da imagem Docker (ex: latest, main-abc123)'
+        required: false
+        default: 'latest'
+
+env:
+  DOCKER_IMAGE: ${{ secrets.DOCKERHUB_USERNAME || 'your-username' }}/whatsapp-service
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
     
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
       - name: Setup SSH
         uses: webfactory/ssh-agent@v0.9.0
         with:
@@ -23,21 +30,29 @@ jobs:
         run: |
           ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
 
-      - name: Copy files to VPS
+      - name: Determine image tag
+        id: image_tag
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "tag=${{ github.event.inputs.image_tag }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=latest" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Copy docker-compose.yml to VPS
         run: |
           DEPLOY_PATH="${{ secrets.VPS_DEPLOY_PATH }}"
           if [ -z "$DEPLOY_PATH" ]; then
             DEPLOY_PATH="/opt/whatsapp-service"
           fi
-          rsync -avz --delete \
-            --exclude '.git' \
-            --exclude 'node_modules' \
-            --exclude '.env' \
-            --exclude 'auth' \
-            -e ssh \
-            ./ ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:$DEPLOY_PATH/
+          
+          # Criar diretório no VPS se não existir
+          ssh ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "mkdir -p $DEPLOY_PATH"
+          
+          # Copiar apenas docker-compose.yml
+          scp docker-compose.yml ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:$DEPLOY_PATH/docker-compose.yml
 
-      - name: Build and deploy Docker container
+      - name: Update Docker container on VPS
         run: |
           ssh ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << EOF
             set -e
@@ -47,32 +62,77 @@ jobs:
               DEPLOY_PATH="/opt/whatsapp-service"
             fi
             
-            # Criar diretório se não existir
-            mkdir -p "\$DEPLOY_PATH"
             cd "\$DEPLOY_PATH"
             
             # Criar diretório auth se não existir
             mkdir -p auth
             
+            # Login no Docker Hub (se necessário)
+            if [ -n "${{ secrets.DOCKERHUB_USERNAME }}" ] && [ -n "${{ secrets.DOCKERHUB_TOKEN }}" ]; then
+              echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin || true
+            fi
+            
+            # Fazer pull da nova imagem
+            IMAGE_TAG="${{ steps.image_tag.outputs.tag }}"
+            IMAGE_NAME="${{ env.DOCKER_IMAGE }}:\$IMAGE_TAG"
+            echo "Fazendo pull da imagem: \$IMAGE_NAME"
+            docker pull \$IMAGE_NAME || {
+              echo "Erro ao fazer pull da imagem. Tentando com tag 'latest'..."
+              IMAGE_NAME="${{ env.DOCKER_IMAGE }}:latest"
+              docker pull \$IMAGE_NAME
+            }
+            
             # Parar e remover container antigo se existir
-            if [ "$(docker ps -aq -f name=whatsapp-web-app)" ]; then
+            if [ "\$(docker ps -aq -f name=whatsapp-web-app)" ]; then
               echo "Parando container antigo..."
               docker stop whatsapp-web-app || true
               docker rm whatsapp-web-app || true
             fi
             
-            # Remover imagem antiga se existir (opcional, para economizar espaço)
-            if [ "$(docker images -q whatsapp-web-app:latest)" ]; then
-              echo "Removendo imagem antiga..."
-              docker rmi whatsapp-web-app:latest || true
+            # Atualizar docker-compose.yml para usar a imagem do Docker Hub
+            # Substituir a seção build por image no docker-compose.yml existente
+            if [ -f docker-compose.yml ]; then
+              # Criar backup
+              cp docker-compose.yml docker-compose.yml.bak
+              
+              # Atualizar docker-compose.yml para usar a imagem do Docker Hub
+              sed -i "s|build:.*|image: \$IMAGE_NAME|g" docker-compose.yml
+              sed -i "/dockerfile:/d" docker-compose.yml
+              sed -i "/context:/d" docker-compose.yml
+            else
+              # Criar docker-compose.yml se não existir
+              cat > docker-compose.yml << 'COMPOSE_EOF'
+          version: '3.8'
+          
+          services:
+            whatsapp-web:
+              image: PLACEHOLDER_IMAGE
+              container_name: whatsapp-web-app
+              ports:
+                - "${PORT:-3000}:3000"
+              environment:
+                - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+                - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+                - AWS_REGION=${AWS_REGION:-us-east-1}
+                - AWS_S3_BUCKET_NAME=${AWS_S3_BUCKET_NAME}
+                - AWS_S3_REMOTE_DATA_PATH=${AWS_S3_REMOTE_DATA_PATH:-whatsapp-sessions/}
+                - PORT=${PORT:-3000}
+                - NODE_ENV=${NODE_ENV:-production}
+                - DEBUG=${DEBUG:-false}
+                - LOG_LEVEL=${LOG_LEVEL:-info}
+              volumes:
+                - ./auth:/app/auth
+              restart: unless-stopped
+              shm_size: '2gb'
+              deploy:
+                resources:
+                  limits:
+                    memory: 2G
+                  reservations:
+                    memory: 512M
+          COMPOSE_EOF
+              sed -i "s|PLACEHOLDER_IMAGE|\$IMAGE_NAME|g" docker-compose.yml
             fi
-            
-            # Fazer build da nova imagem
-            echo "Fazendo build da nova imagem Docker..."
-            docker build -t whatsapp-web-app:latest .
-            
-            # Rodar o novo container usando docker-compose ou docker run
-            echo "Iniciando novo container..."
             
             # Verificar se existe arquivo .env no VPS
             if [ ! -f .env ]; then
@@ -98,12 +158,12 @@ jobs:
                 --name whatsapp-web-app \
                 --restart unless-stopped \
                 -p 3000:3000 \
-                $ENV_FILE_FLAG \
+                \$ENV_FILE_FLAG \
                 -v "\$DEPLOY_PATH/auth:/app/auth" \
                 --shm-size=2g \
                 --memory="2g" \
                 --memory-reservation="512m" \
-                whatsapp-web-app:latest
+                \$IMAGE_NAME
             fi
             
             # Limpar imagens não utilizadas
@@ -111,6 +171,7 @@ jobs:
             docker image prune -f
             
             echo "Deploy concluído com sucesso!"
+            echo "Imagem utilizada: \$IMAGE_NAME"
           EOF
 
       - name: Verify deployment
