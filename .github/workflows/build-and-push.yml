@@ -4,6 +4,16 @@ on:
   push:
     branches:
       - main  # branch que dispara o deploy
+  workflow_run:
+    workflows: ["Build and Push Docker Image"]
+    types:
+      - completed
+  workflow_dispatch:  # Permite execução manual
+    inputs:
+      image_tag:
+        description: 'Tag da imagem Docker (ex: latest, main-abc123)'
+        required: false
+        default: 'latest
 
 jobs:
   deploy:
