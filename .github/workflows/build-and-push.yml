@@ -3,7 +3,7 @@ name: Deploy Docker to VPS
 on:
   push:
     branches:
-      - main  # ou sua branch de deploy
+      - main  # branch que dispara o deploy
 
 jobs:
   deploy:
@@ -18,15 +18,11 @@ jobs:
       with:
         ssh-private-key: ${{ secrets.VPS_SSH_KEY }}
 
-    - name: Sync repository and build Docker
+    - name: Deploy on VPS
       run: |
         ssh -o StrictHostKeyChecking=no ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "
-          cd /caminho/do/seu/projeto || exit
+          cd ~/huper-abby/huper-whatsapp-service || exit
           git pull origin main
           docker build -t meu-usuario/meu-app:latest .
-          echo $DOCKER_PASSWORD | docker login -u $DOCKER_USERNAME --password-stdin
           docker push meu-usuario/meu-app:latest
         "
-      env:
-        DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
-        DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
