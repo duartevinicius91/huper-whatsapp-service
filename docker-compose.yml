@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  whatsapp-web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: whatsapp-web-app
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      # AWS Configuration (obrigatórias)
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_REGION=${AWS_REGION:-us-east-1}
+      - AWS_S3_BUCKET_NAME=${AWS_S3_BUCKET_NAME}
+      - AWS_S3_REMOTE_DATA_PATH=${AWS_S3_REMOTE_DATA_PATH:-whatsapp-sessions/}
+      
+      # Application Configuration
+      - PORT=${PORT:-3000}
+      - NODE_ENV=${NODE_ENV:-production}
+      - DEBUG=${DEBUG:-false}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+    volumes:
+      # Persistir autenticações locais (opcional, já que usa S3)
+      - ./auth:/app/auth
+    restart: unless-stopped
+    # Configurações de segurança para Puppeteer
+    shm_size: '2gb'
+    # Limites de recursos (ajuste conforme necessário)
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 512M
+

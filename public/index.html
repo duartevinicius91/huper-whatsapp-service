@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WhatsApp Web - Gerenciador de Conversas</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Sidebar -->
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <h1>💬 WhatsApp Web</h1>
+                <button class="btn-new-session" onclick="showNewSessionModal()">+ Nova Sessão</button>
+            </div>
+            
+            <div class="sessions-list" id="sessionsList">
+                <div class="loading">Carregando sessões...</div>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <div class="chat-header" id="chatHeader">
+                <div class="welcome-message">
+                    <h2>Bem-vindo ao Gerenciador de Conversas</h2>
+                    <p>Selecione uma sessão ou crie uma nova para começar</p>
+                </div>
+            </div>
+
+            <div class="chat-messages" id="chatMessages">
+                <div class="empty-state">
+                    <div class="empty-icon">💬</div>
+                    <h3>Nenhuma conversa selecionada</h3>
+                    <p>Selecione uma sessão na barra lateral para ver as conversas</p>
+                </div>
+            </div>
+
+            <div class="chat-input-container" id="chatInputContainer" style="display: none;">
+                <div class="input-wrapper">
+                    <input 
+                        type="text" 
+                        id="messageInput" 
+                        placeholder="Digite uma mensagem..." 
+                        onkeypress="handleKeyPress(event)"
+                    >
+                    <button class="btn-send" onclick="sendMessage()">Enviar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Nova Sessão -->
+    <div class="modal" id="newSessionModal">
+        <div class="modal-content">
+            <span class="close" onclick="closeNewSessionModal()">&times;</span>
+            <h2>Nova Sessão</h2>
+            <div class="form-group">
+                <label>Número de Telefone:</label>
+                <input 
+                    type="text" 
+                    id="newPhoneNumber" 
+                    placeholder="5511999999999 (apenas dígitos)"
+                    maxlength="20"
+                >
+                <small>Formato: código do país + DDD + número (ex: 5511999999999)</small>
+            </div>
+            <div class="modal-actions">
+                <button class="btn-primary" onclick="createNewSession()">Criar Sessão</button>
+                <button class="btn-secondary" onclick="closeNewSessionModal()">Cancelar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal QR Code -->
+    <div class="modal" id="qrModal">
+        <div class="modal-content">
+            <span class="close" onclick="closeQRModal()">&times;</span>
+            <h2>Escaneie o QR Code</h2>
+            <div id="qrCodeContainer">
+                <div class="loading">Gerando QR Code...</div>
+            </div>
+            <p class="qr-instructions">
+                Abra o WhatsApp no seu celular<br>
+                Vá em <strong>Configurações > Aparelhos conectados > Conectar um aparelho</strong><br>
+                Escaneie o QR Code acima
+            </p>
+            <button class="btn-secondary" onclick="closeQRModal()">Fechar</button>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
+
