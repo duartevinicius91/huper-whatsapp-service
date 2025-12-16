@@ -32,7 +32,7 @@ jobs:
       run: |
         ssh -o StrictHostKeyChecking=no ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "
           cd ~/huper-abby/huper-whatsapp-service || exit
-          git pull origin main
-          docker build -t meu-usuario/meu-app:latest .
-          docker push meu-usuario/meu-app:latest
+          git pull origin master
+          docker build -t duartevinicius91/huper-whatsapp-service .
+          docker push duartevinicius91/huper-whatsapp-service
         "
