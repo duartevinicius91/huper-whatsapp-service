@@ -257,6 +257,78 @@ LOG_TIMESTAMPS=true
 - [AWS S3 Documentation](https://docs.aws.amazon.com/s3/)
 - [Guia de Debug](./DEBUG.md)
 
+## Deploy Automatizado com GitHub Actions
+
+Este projeto inclui uma pipeline de CI/CD configurada para fazer deploy automático no VPS sempre que houver push na branch `main`.
+
+### Configuração dos Secrets no GitHub
+
+Para que a pipeline funcione, você precisa configurar os seguintes secrets no GitHub:
+
+1. Acesse: **Settings** → **Secrets and variables** → **Actions** → **New repository secret**
+
+2. Adicione os seguintes secrets:
+
+   - **`VPS_HOST`**: Endereço IP ou domínio do seu VPS (ex: `192.168.1.100` ou `meuservidor.com`)
+   - **`VPS_USER`**: Usuário SSH do VPS (ex: `root` ou `ubuntu`)
+   - **`SSH_PRIVATE_KEY`**: Chave privada SSH para autenticação no VPS
+   - **`VPS_DEPLOY_PATH`** (opcional): Caminho no VPS onde o projeto será deployado (padrão: `/opt/whatsapp-service`)
+
+### Como gerar a chave SSH
+
+No seu VPS, execute:
+
+```bash
+# Gerar par de chaves (se ainda não tiver)
+ssh-keygen -t ed25519 -C "github-actions"
+
+# Copiar a chave pública para authorized_keys
+cat ~/.ssh/id_ed25519.pub >> ~/.ssh/authorized_keys
+
+# Exibir a chave privada (copie o conteúdo completo)
+cat ~/.ssh/id_ed25519
+```
+
+Copie o conteúdo completo da chave privada e adicione como secret `SSH_PRIVATE_KEY` no GitHub.
+
+### Configuração no VPS
+
+Certifique-se de que o VPS tem:
+
+1. **Docker instalado**:
+   ```bash
+   curl -fsSL https://get.docker.com -o get-docker.sh
+   sh get-docker.sh
+   ```
+
+2. **Docker Compose instalado** (opcional, mas recomendado):
+   ```bash
+   sudo apt-get update
+   sudo apt-get install docker-compose-plugin
+   ```
+
+3. **Arquivo `.env` configurado** no diretório do projeto com todas as variáveis de ambiente necessárias.
+
+4. **Permissões adequadas** para o usuário SSH executar comandos Docker:
+   ```bash
+   sudo usermod -aG docker $USER
+   ```
+
+### Como funciona a pipeline
+
+1. **Trigger**: A pipeline é executada automaticamente quando há push na branch `main` ou manualmente via GitHub Actions
+2. **Build**: O código é copiado para o VPS via SSH/rsync
+3. **Deploy**: No VPS, a pipeline:
+   - Para e remove o container antigo
+   - Faz build da nova imagem Docker
+   - Inicia um novo container com a nova imagem
+   - Limpa imagens não utilizadas
+
+### Executar deploy manualmente
+
+Você pode executar a pipeline manualmente acessando:
+**Actions** → **Deploy to VPS** → **Run workflow**
+
 ## Licença
 
 ISC
