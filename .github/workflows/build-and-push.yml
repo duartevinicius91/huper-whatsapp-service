@@ -3,7 +3,8 @@ name: Build and push image
 on:
   push:
     branches:
-      - main  # branch que dispara o deploy
+      - master
+      - develop # branch que dispara o deploy
   workflow_run:
     workflows: ["Build and Push Docker Image"]
     types:
